@@ -4,6 +4,7 @@ import logging
 import time
 from distutils.util import strtobool
 from SSMDelegate import SSMDelegate
+import botocore
 
 __author__ = "Gary Silverman"
 
@@ -55,10 +56,17 @@ class Worker(object):
 
 
 class StartWorker(Worker):
+
 	def __init__(self, ddbRegion, workloadRegion, snsNotConfigured, snsTopic, snsTopicSubject, instance, logger, dryRunFlag):
 		super(StartWorker, self).__init__(workloadRegion, snsNotConfigured, snsTopic, snsTopicSubject, instance, logger, dryRunFlag)
 
 		self.ddbRegion=ddbRegion
+
+		try:
+			self.elb = boto3.client('elb', region_name='eu-west-1', region_name=self.dynamoDBRegion)
+		except Exception as e:
+			msg = 'Orchestrator::__init__() Exception obtaining botot3 elb client in region %s -->' % self.workloadRegion
+			self.logger.error(msg + str(e))
 
 	def startInstance(self):
 
@@ -67,10 +75,33 @@ class StartWorker(Worker):
 			self.logger.warning('DryRun Flag is set - instance will not be started')
 		else:
 			try:
-				#EC2.Instance.start()
-				result=self.instance.start()
+				self.all_elbs = self.elb.describe_load_balancers()
 			except Exception as e:
-				self.logger.warning('Worker::instance.start() encountered an exception of -->' + str(e))
+				self.logger.warning('Worker::Error obtaining all ELBs' + str(e))
+			try:
+				for i in self.all_elbs['LoadBalancerDescriptions']:
+					for j in i['Instances']:
+						if j['InstanceId'] == self.instance.id:
+							self.elb_name = i['LoadBalancerName']
+							self.logger.info("Instance %s is attached to ELB %s" % self.instance.id,self.elb_name)
+				try:
+					self.elb.deregister_instances_from_load_balancer(LoadBalancerName=self.elb_name, Instances=[{'InstanceId': self.instance.ide}])
+					self.logger.info("Succesfully deregistered instance %s from load balancer %s" % self.instance.id, self.elb_name)
+				except botocore.exceptions.ClientError as e:
+					self.logger.info("Could not deregistered instance %s from load balancer %s" % self.instance.id,self.elb_name)
+				try:
+					self.elb.register_instances_with_load_balancer(LoadBalancerName=self.elb_name,Instances=[{'InstanceId': self.instance.id}])
+					self.logger.info("Succesfully registered instance %s to load balancer %s" % self.instance.id, self.elb_name)
+				except botocore.exceptions.ClientError as e:
+					self.logger.info('Could not register instance [%s] to load balancer [%s] because of [%s]' % (self.instance.id, self.elb_name, e)
+				try:
+				#EC2.Instance.start()
+					result=self.instance.start()
+				except Exception as e:
+					self.logger.warning('Worker::instance.start() encountered an exception of -->' + str(e))
+			except Exception as e:
+				result = self.instance.start()
+				self.logger.info('Instance [%s] does not have any Load balancer, will just start it]' % (self.instance.id))
 
 		self.logger.info('startInstance() for ' + self.instance.id + ' result is %s' % result)
 
