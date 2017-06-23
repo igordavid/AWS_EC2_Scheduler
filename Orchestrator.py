@@ -84,6 +84,16 @@ class Orchestrator(object):
 			msg = 'Orchestrator::__init__() Exception obtaining botot3 dynamodb client in region %s -->' % self.workloadRegion
 			self.logger.error(msg + str(e))
 
+		try:
+			self.elb = boto3.client('elb', region_name=self.workloadRegion)
+		except Exception as e:
+			msg = 'Orchestrator::__init__() Exception obtaining botot3 elb client in region %s -->' % self.workloadRegion
+			self.logger.error(msg + str(e))
+
+		try:
+			self.all_elbs = self.elb.describe_load_balancers()
+		except Exception as e:
+			msg = 'Orchestrator:: Exception obtaining all ELBs in region %s -->' % self.workloadRegion
 
 		# Directive DynamoDB Table Related
 		self.workloadSpecificationTableName=Orchestrator.WORKLOAD_SPEC_TABLE_NAME
@@ -178,7 +188,7 @@ class Orchestrator(object):
 
 		# The region where the workload is running.  Note: this may be a different region than the 
 		# DynamodDB configuration
-		self.workloadRegion=self.workloadSpecificationDict[Orchestrator.WORKLOAD_SPEC_REGION_KEY]
+		self.workloadRegion = self.workloadSpecificationDict[Orchestrator.WORKLOAD_SPEC_REGION_KEY]
 
 		# We provision the boto3 resource here because we need to have determined the Workload Region as a dependency,
 		# which is done just above in this method
@@ -619,7 +629,7 @@ class Orchestrator(object):
 		self.logger.debug('In startATier() for %s', tierName)
 		for currInstance in instancesToStartList:
 			self.logger.debug('Starting instance %s', currInstance)
-			startWorker = StartWorker(self.dynamoDBRegion, self.workloadRegion, self.snsNotConfigured, self.snsTopic, self.snsTopicSubjectLine, currInstance, self.logger, self.dryRunFlag)
+			startWorker = StartWorker(self.dynamoDBRegion, self.workloadRegion, self.snsNotConfigured, self.snsTopic, self.snsTopicSubjectLine, currInstance, self.all_elbs, self.logger, self.dryRunFlag)
 
 			# If a ScalingProfile was specified, change the instance type now, prior to Start
 			instanceTypeToLaunch = self.isScalingAction(tierName)
