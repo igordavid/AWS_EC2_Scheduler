@@ -91,15 +91,11 @@ class StartWorker(Worker):
 			self.logger.warning('DryRun Flag is set - instance will not be started')
 		else:
 			try:	
-				if self.all_elbs == "0":
-					self.logger.info('Instance [%s] does not have any Load balancers, will just start it' % (self.instance.id))
-					result=self.instance.start()
-					self.logger.info('startInstance() for ' + self.instance.id + ' result is %s' % result)
-					
-				else:
+				if self.all_elbs != "0":
 					StartWorker.addressELBRegistration()
-					result=self.instance.start()
-					self.logger.info('startInstance() for ' + self.instance.id + ' result is %s' % result)
+				        self.logger.info('Instance [%s] does not have any Load balancers, will just start it' % (self.instance.id))
+				result=self.instance.start()
+				self.logger.info('startInstance() for ' + self.instance.id + ' result is %s' % result)
 			except Exception as e:
 				self.logger.warning('Worker::instance.start() encountered an exception of -->' + str(e))
 
