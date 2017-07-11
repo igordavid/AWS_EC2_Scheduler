@@ -80,20 +80,12 @@ class Orchestrator(object):
 		#
 		try:
 			self.dynDBC = boto3.client('dynamodb', region_name=self.dynamoDBRegion)
+			print "self.dynDBC"
 		except Exception as e:
 			msg = 'Orchestrator::__init__() Exception obtaining botot3 dynamodb client in region %s -->' % self.workloadRegion
 			self.logger.error(msg + str(e))
 
-		try:
-			self.elb = boto3.client('elb', region_name=self.workloadRegion)
-		except Exception as e:
-			msg = 'Orchestrator::__init__() Exception obtaining botot3 elb client in region %s -->' % self.workloadRegion
-			self.logger.error(msg + str(e))
-
-		try:
-			self.all_elbs = self.elb.describe_load_balancers()
-		except Exception as e:
-			msg = 'Orchestrator:: Exception obtaining all ELBs in region %s -->' % self.workloadRegion
+		
 
 		# Directive DynamoDB Table Related
 		self.workloadSpecificationTableName=Orchestrator.WORKLOAD_SPEC_TABLE_NAME
@@ -198,9 +190,19 @@ class Orchestrator(object):
 			msg = 'Orchestrator::initializeState() Exception obtaining botot3 ec2 resource in region %s -->' % self.workloadRegion
 			self.logger.error(msg + str(e))
 
+		try:
+			self.elb = boto3.client('elb', region_name=self.workloadRegion)
+		except Exception as e:
+			msg = 'Orchestrator::__init__() Exception obtaining botot3 elb client in region %s -->' % self.workloadRegion
+			self.logger.error(msg + str(e))
+
+		try:
+			self.all_elbs = self.elb.describe_load_balancers()
+		except Exception as e:
+			self.all_elbs = "0"
+			msg = 'Orchestrator:: Exception obtaining all ELBs in region %s -->' % self.workloadRegion
 		# Grab tier specific workload information from DynamoDB
 		self.lookupTierSpecs(self.partitionTargetValue)
-
 
 	def lookupWorkloadSpecification(self, partitionTargetValue):
 		try:
@@ -629,6 +631,8 @@ class Orchestrator(object):
 		self.logger.debug('In startATier() for %s', tierName)
 		for currInstance in instancesToStartList:
 			self.logger.debug('Starting instance %s', currInstance)
+			print self.all_elbs
+			print type(self.all_elbs)
 			startWorker = StartWorker(self.dynamoDBRegion, self.workloadRegion, self.snsNotConfigured, self.snsTopic, self.snsTopicSubjectLine, currInstance, self.all_elbs, self.logger, self.dryRunFlag)
 
 			# If a ScalingProfile was specified, change the instance type now, prior to Start
