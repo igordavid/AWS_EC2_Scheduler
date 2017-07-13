@@ -57,32 +57,34 @@ class Worker(object):
 
 class StartWorker(Worker):
 
-	def __init__(self, ddbRegion, workloadRegion, snsNotConfigured, snsTopic, snsTopicSubject, instance, all_elbs, logger, dryRunFlag):
+	def __init__(self, ddbRegion, workloadRegion, snsNotConfigured, snsTopic, snsTopicSubject, instance, all_elbs, elb, logger, dryRunFlag):
 		super(StartWorker, self).__init__(workloadRegion, snsNotConfigured, snsTopic, snsTopicSubject, instance, logger, dryRunFlag)
 
 		self.ddbRegion=ddbRegion
-
+		self.all_elbs=all_elbs
+		self.elb=elb 
+		
 	def addressELBRegistration(self):
-
 		try:
-			for i in self.all_elbs['LoadBalancerDescriptions']:
-				for j in i['Instances']:
-					if j['InstanceId'] == self.instance.id:
-						self.elb_name = i['LoadBalancerName']
-						self.logger.info("Instance %s is attached to ELB %s" % self.instance.id, self.elb_name)
-			try:
-				self.elb.deregister_instances_from_load_balancer(LoadBalancerName=self.elb_name,Instances=[{'InstanceId': self.instance.id}])
-				self.logger.info("Succesfully deregistered instance %s from load balancer %s" % self.instance.id, self.elb_name)
-			except botocore.exceptions.ClientError as e:
-				self.logger.info("Could not deregistered instance %s from load balancer %s" % self.instance.id,self.elb_name)
-			try:
-				self.elb.register_instances_with_load_balancer(LoadBalancerName=self.elb_name, Instances=[{'InstanceId': self.instance.id}])
-				self.logger.info("Succesfully registered instance %s to load balancer %s" % self.instance.id, self.elb_name)
-			except botocore.exceptions.ClientError as e:
-				self.logger.info('Could not register instance [%s] to load balancer [%s] because of [%s]' % (self.instance.id, self.elb_name, e))
-		except:
-			self.logger.info('Instance [%s] does not have any Load balancer, will just start it]' % (self.instance.id))
-
+				for i in self.all_elbs['LoadBalancerDescriptions']:
+					for j in i['Instances']:
+						if j['InstanceId'] == self.instance.id:
+							elb_name = i['LoadBalancerName']
+							self.logger.info("Instance %s is attached to ELB %s" % (self.instance.id, elb_name))
+							try:
+								self.elb.deregister_instances_from_load_balancer(LoadBalancerName=elb_name,Instances=[{'InstanceId': self.instance.id}])
+								self.logger.info("Succesfully deregistered instance %s from load balancer %s" % (self.instance.id, elb_name))
+							except botocore.exceptions.ClientError as e:
+								self.logger.info("Could not deregistered instance %s from load balancer %s" % (self.instance.id, elb_name))
+								self.logger.warning('Worker::addressELBRegistration()::deregister_instances_from_load_balancer() encountered an exception of -->' + str(e))
+							try:
+								self.elb.register_instances_with_load_balancer(LoadBalancerName=elb_name, Instances=[{'InstanceId': self.instance.id}])
+								self.logger.info("Succesfully registered instance %s to load balancer %s" % (self.instance.id, elb_name))
+							except botocore.exceptions.ClientError as e:
+								self.logger.info('Could not register instance [%s] to load balancer [%s] because of [%s]' % (self.instance.id, elb_name, str(e)))
+								self.logger.warning('Worker::addressELBRegistration()::register_instances_with_load_balancer() encountered an exception of -->' + str(e))
+		except Exception as e:
+			self.logger.warning('Worker::addressELBRegistration() encountered an exception of -->' + str(e))
 
 	def startInstance(self):
 
@@ -92,8 +94,8 @@ class StartWorker(Worker):
 		else:
 			try:	
 				if self.all_elbs != "0":
-					StartWorker.addressELBRegistration()
-				        self.logger.info('Instance [%s] does not have any Load balancers, will just start it' % (self.instance.id))
+					self.logger.info('addressELBRegistration() for %s' % self.instance.id)
+					self.addressELBRegistration()
 				result=self.instance.start()
 				self.logger.info('startInstance() for ' + self.instance.id + ' result is %s' % result)
 			except Exception as e:
@@ -133,8 +135,8 @@ class StartWorker(Worker):
 		self.startInstance()
 
 class StopWorker(Worker):
-	def __init__(self, ddbRegion, workloadRegion, snsNotConfigured, snsTopic, snsTopicSubject, instance, logger, all_elbs, dryRunFlag):
-		super(StopWorker, self).__init__(workloadRegion, snsNotConfigured, snsTopic, snsTopicSubject, instance, logger, all_elbs, dryRunFlag)
+	def __init__(self, ddbRegion, workloadRegion, snsNotConfigured, snsTopic, snsTopicSubject, instance, logger, dryRunFlag):
+		super(StopWorker, self).__init__(workloadRegion, snsNotConfigured, snsTopic, snsTopicSubject, instance, logger, dryRunFlag)
 		
 		self.ddbRegion=ddbRegion
 
