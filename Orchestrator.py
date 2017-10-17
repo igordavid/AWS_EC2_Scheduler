@@ -466,17 +466,19 @@ class Orchestrator(object):
 		# Filter the instances
 		# NOTE: Only instances within the specified region are returned
 		targetInstanceColl = {}
-		try:
-			targetInstanceColl = self.ec2R.instances.filter(Filters=targetFilter)
+		instances_filter_success=0
+		while (instances_filter_success==0):
+			try:	
+				targetInstanceColl = self.ec2R.instances.filter(Filters=targetFilter)
+				self.logger.info('lookupInstancesByFilter(): # of instances found for tier %s in state %s is %i' % (tierName, targetInstanceStateKey, len(list(targetInstanceColl))))
+				instances_filter_success=1
+				for curr in targetInstanceColl:
+					self.logger.debug('lookupInstancesByFilter(): Found the following matching targets %s' % curr)
 
-			self.logger.info('lookupInstancesByFilter(): # of instances found for tier %s in state %s is %i' % (tierName, targetInstanceStateKey, len(list(targetInstanceColl))))
-			for curr in targetInstanceColl:
-				self.logger.debug('lookupInstancesByFilter(): Found the following matching targets %s' % curr)
-
-		except Exception as e:
-			msg = 'Orchestrator::lookupInstancesByFilter() Exception encountered during instance filtering %s -->'
-			self.logger.error(msg + str(e))
-
+			except Exception as e:
+				msg = 'Orchestrator::lookupInstancesByFilter() Exception encountered during instance filtering %s -->'
+				self.logger.error(msg + str(e))
+				time.sleep(round(random.random(),2))
 
 		return targetInstanceColl
 
