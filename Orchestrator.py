@@ -472,13 +472,22 @@ class Orchestrator(object):
 			self.logger.info('lookupInstancesByFilter(): # of instances found for tier %s in state %s is %i' % (tierName, targetInstanceStateKey, len(list(targetInstanceColl))))
 			for curr in targetInstanceColl:
 				self.logger.debug('lookupInstancesByFilter(): Found the following matching targets %s' % curr)
-
 		except Exception as e:
 			msg = 'Orchestrator::lookupInstancesByFilter() Exception encountered during instance filtering %s -->'
 			self.logger.error(msg + str(e))
 
 
 		return targetInstanceColl
+
+
+	def exponentialBackoff(count):
+		try:
+			sleepTime = pow(float(2), float(count))
+			msg = 'exponentialBackoff(), sleeping for number of seconds ---> '
+			self.logger.info(msg + str(sleepTime))
+		except Exception as e:
+			msg = 'exponentialBackoff failed with error %s -->'
+self.logger.error(msg + str(e))
 
 	def makeSNSTopic(self):
 
