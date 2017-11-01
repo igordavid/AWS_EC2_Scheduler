@@ -139,7 +139,7 @@ class Orchestrator(object):
 		]
 
 		self.scalingProfile = scalingProfile
-
+		self.fleetSubset = fleetSubset
 		#
 		###
 
@@ -297,6 +297,9 @@ class Orchestrator(object):
 
 				if (Orchestrator.TIER_SCALING in currTier):
 					self.tierSpecDict[ currTier[Orchestrator.TIER_NAME] ].update( { Orchestrator.TIER_SCALING : currTier[ Orchestrator.TIER_SCALING ] } )
+
+				if (Orchestrator.FLEET_SUBSET in currTier):
+					self.tierSpecDict currtier[Orchestrator.TIER_NAME] ].update( { Orchestrator.FLEET_SUBSET : currTier[ Orchestrator.FLEET_SUBSET ] } )
 
 				#self.logSpecDict('lookupTierSpecs', currTier, Orchestrator.LOG_LEVEL_DEBUG )
 
@@ -690,6 +693,22 @@ class Orchestrator(object):
 				self.logger.warning('Scaling Profile of [%s] specified but no TierScaling dictionary found in DynamoDB for tier [%s].  No scaling action taken' % (str(self.scalingProfile), tierName) )
 
 		return( None )
+        def isFleetSubset(self, subsetFleetValue):
+		if(self.fleetSubset):
+			self.logger.debug('SubsetFleet requested')
+			
+			subsetFleetAttribute = self.tierSpecDict[subsetFleetValue]
+			if( Orchestrator.FLEET_SUBSET in tierAttributes):
+				fleetSubsetDict = tierAttributes[ Orchestrator.FLEET_SUBSET ]
+				self.logger.debug('FleetSubset for Tier %s %s ' % (subsetFleetValue, str(fleetSubsetDict) ))
+
+				if ( self.fleetsubset in fleetSubsetDict ):
+					number_of_instances = fleetSubsetDict[self.fleetsubset]
+					return number_of_instances
+				else:
+					self.logger.warning('FleetSubset of [%s] not in tier [%s] ' % (str(self.fleetsubset), subsetFleetValue ) )
+			else:
+				self.logger.warning('FleetSubset Profile of [%s] specified but no FleetSubset dictionary found in DynamoDB for tier [%s]. No action taken' % (str(self.fleetsubset), subsetFleetValue) )
 
 	def initLogging(self, loglevel):
 		# Setup the Logger
@@ -758,6 +777,7 @@ if __name__ == "__main__":
 	parser.add_argument('-t','--testcases', action='count', help='Run the test cases', required=False)
 	parser.add_argument('-d','--dryrun', action='count', help='Run but take no Action', required=False)
 	parser.add_argument('-p','--scalingProfile', help='Resize instances based on Scaling Profile name', required=False)
+	parser.add_argument('-f','--fleetSubset',help='Define number of instances to start', required=False)
 	parser.add_argument('-l','--loglevel', choices=['critical', 'error', 'warning', 'info', 'debug', 'notset'], help='The level to record log messages to the logfile', required=False)
 	
 	args = parser.parse_args()
@@ -773,7 +793,7 @@ if __name__ == "__main__":
 		dryRun = False
 
 	# Launch the Orchestrator - the main component of the subsystem
-	orchMain = Orchestrator(args.workloadIdentifier, loglevel, args.dynamoDBRegion, args.scalingProfile, dryRun)
+	orchMain = Orchestrator(args.workloadIdentifier, loglevel, args.dynamoDBRegion, args.scalingProfile, args.fleetSubset, dryRun)
 
 	# If testcases set, run them, otherwise run the supplied Action only
 	if( args.testcases > 0 ):	
