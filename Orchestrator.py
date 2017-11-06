@@ -6,6 +6,7 @@ import logging.handlers
 import time
 import datetime
 import argparse
+import re
 
 from distutils.util import strtobool
 from botocore.exceptions import ClientError
@@ -141,7 +142,6 @@ class Orchestrator(object):
 		]
 
 		self.scalingProfile = scalingProfile
-#		self.fleetSubset = fleetSubset
 		#
 		###
 
@@ -276,7 +276,6 @@ class Orchestrator(object):
 		else:
 			# Get the items from the result
 			resultItems=dynamodbItem['Items']
-			print resultItems
 			# Create a Dictionary that stores the currTier and currTier associated with Tiers
 			for currTier in resultItems:
 				self.logger.info('DynamoDB Query for Tier->'+ currTier[Orchestrator.TIER_NAME])
@@ -365,7 +364,6 @@ class Orchestrator(object):
 		elif( tierAction == Orchestrator.TIER_START ):
 			# Locate the TIER_START Dictionary
 			tierActionAttributes = tierAttributes[Orchestrator.TIER_START]
-			#print tierActionAttributes
 
 		# Return the value in the Dict for TierSynchronization
 		if Orchestrator.TIER_SYCHRONIZATION in tierActionAttributes:
@@ -652,11 +650,29 @@ class Orchestrator(object):
 		#region=self.workloadSpecificationDict[self.WORKLOAD_SPEC_REGION_KEY]
 
 		self.logger.debug('In startATier() for %s', tierName)
-		print "Total number of filtered instances: %s " % len(list(instancesToStartList))
-		number_of_instances = self.isFleetSubset(tierName)
 
-		# We are checking if there is "default" ScalingTier (which is the same as None actually)"
-		if (number_of_instances is None ) or (number_of_instances == "default"):
+		# number_of_instances is the output of isFleetSubset method
+
+		number_of_instances = self.isFleetSubset(tierName)
+		
+		# Here we are checking if Profile doesn't exists so we can perform a search for percentage if it exists
+	
+		if (number_of_instances is None ):
+			self.logger.debug('Profile not specified')
+			self.logger.info('Profile not specified')
+
+		# Calculate the percentage
+		else:
+			if re.search("%",number_of_instances):
+                                split_number = number_of_instances.split("%")[0]
+                                if (int(split_number) <= 0) or (int(split_number) > 100):
+                                        number_of_instances = "default"
+                                else:
+					number_of_instances =  int(round(int(split_number) * len(list(instancesToStartList)) / 100.0))
+		# We are checking if there is "default" ScalingTier (which is the same as None actually), or if number of desired instances is higher than current number of instances
+
+		if (number_of_instances is None ) or (number_of_instances == "default") or (int(number_of_instances) > len(list(instancesToStartList))):
+
 			for currInstance in instancesToStartList:
 				self.logger.debug('Starting instance %s', currInstance)
 				startWorker = StartWorker(self.dynamoDBRegion, self.workloadRegion, self.snsNotConfigured, self.snsTopic, self.snsTopicSubjectLine, currInstance, self.all_elbs, self.elb, self.scaleInstanceDelay, self.logger, self.dryRunFlag)
@@ -666,12 +682,6 @@ class Orchestrator(object):
 				if( instanceTypeToLaunch ):
 					startWorker.scaleInstance(instanceTypeToLaunch)
 
-			
-				print "Desired FleetSubset of instances to start: %s" % number_of_instances
-				print type(number_of_instances)
-				print "Instance type to start: %s" % instanceTypeToLaunch
-				print "Scaling profile: %s" % self.scalingProfile
-				print "Instance IDs to start: %s" % currInstance
 				# Finally, have the worker Start the instance
 				startWorker.start()
 
@@ -680,8 +690,30 @@ class Orchestrator(object):
 			time.sleep(self.getInterTierOrchestrationDelay(tierName, Orchestrator.TIER_START))
 
 			self.logger.debug('startATier() completed for tier %s' % tierName)
+		# If number of instances is "0":
+
+		elif (int(number_of_instances) == 0):
+			self.logger.debug('Number of desired instances in Tier %s has been chosen to 0, not starting any EC2 instances' % tierName)
+			self.logger.info('Number of desired instances in Tier %s has been chosen to 0, not starting any EC2 instances' % tierName)
+
 		else:
-			print "FleetSubset number of instances: %s" % number_of_instances
+			Counter=0
+			for currInstance in instancesToStartList:
+				self.logger.debug('Starting instance %s', currInstance)
+				startWorker = StartWorker(self.dynamoDBRegion, self.workloadRegion, self.snsNotConfigured, self.snsTopic, self.snsTopicSubjectLine, currInstance, self.all_elbs, self.elb, self.scaleInstanceDelay, self.logger, self.dryRunFlag)
+				instanceTypeToLaunch = self.isScalingAction(tierName)
+				if( instanceTypeToLaunch ):
+					startWorker.scaleInstance(instanceTypeToLaunch)
+				startWorker.start()
+				Counter=Counter+1
+				if (Counter == 	int(number_of_instances)):
+					self.logger.debug('Number of instances reached desired number')
+                                        self.logger.info('Number of instances reached desired number')
+					break
+				else:
+					self.logger.debug('Counter: %s, Desired number: %s, Current number: %s' % (Counter,number_of_instances,len(list(instancesToStartList))))
+					self.logger.info('Counter: %s, Desired number: %s, Current number: %s' % (Counter,number_of_instances,len(list(instancesToStartList))))
+
 				
 
 	def isScalingAction(self, tierName):
@@ -726,12 +758,11 @@ class Orchestrator(object):
 					else:
 						fleet_number = "default"
 
-#					print fleet_number
 					return fleet_number
 				else:
-					self.logger.warning('FleetSubset of [%s] not in tier [%s] ' % (str(self.fleetsubset), subsetFleetValue ) )
+					self.logger.warning('FleetSubset of [%s] not in tier [%s] ' % (str(self.scalingProfile), tierName ) )
 			else:
-				self.logger.warning('FleetSubset Profile of [%s] specified but no FleetSubset dictionary found in DynamoDB for tier [%s]. No action taken' % (str(self.fleetsubset), subsetFleetValue) )
+				self.logger.warning('FleetSubset Profile of [%s] specified but no FleetSubset dictionary found in DynamoDB for tier [%s]. No action taken' % (str(self.scalingProfile), tierName) )
 
 	def initLogging(self, loglevel):
 		# Setup the Logger
@@ -800,7 +831,6 @@ if __name__ == "__main__":
 	parser.add_argument('-t','--testcases', action='count', help='Run the test cases', required=False)
 	parser.add_argument('-d','--dryrun', action='count', help='Run but take no Action', required=False)
 	parser.add_argument('-p','--scalingProfile', help='Resize instances based on Scaling Profile name', required=False)
-	parser.add_argument('-f','--fleetSubset',help='Define number of instances to start', required=False)
 	parser.add_argument('-l','--loglevel', choices=['critical', 'error', 'warning', 'info', 'debug', 'notset'], help='The level to record log messages to the logfile', required=False)
 	
 	args = parser.parse_args()
@@ -816,7 +846,6 @@ if __name__ == "__main__":
 		dryRun = False
 
 	# Launch the Orchestrator - the main component of the subsystem
-#	orchMain = Orchestrator(args.workloadIdentifier, loglevel, args.dynamoDBRegion, args.scalingProfile, args.fleetSubset, dryRun)
         orchMain = Orchestrator(args.workloadIdentifier, loglevel, args.dynamoDBRegion, args.scalingProfile, dryRun)
 
 	# If testcases set, run them, otherwise run the supplied Action only
