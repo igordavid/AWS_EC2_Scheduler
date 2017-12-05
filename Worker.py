@@ -153,40 +153,56 @@ class StartWorker(Worker):
                 preventEbsOptimizedList = [ 't2' ]
                 if (instanceFamily in preventEbsOptimizedList ):
                     ebsOptimizedAttr = False
-		else:
+                else:
                     ebsOptimizedAttr = self.instance.ebs_optimized    # May have been set to True or False previously
-		instance_type_check=0
-		while(instance_type_check == 0):
-			try: 
-       			        result = self.instance.modify_attribute(
-                       		InstanceType={
-                           	'Value': modifiedInstanceType
-                        	}
-                    		)
-				instance_type_check=1
-			except Exception as e:
-				self.logger.warning('Worker::instance.modify_attribute() encountered an exception where requested instance type ['+ modifiedInstanceType +'] resulted in -->' + str(e))
-				time.sleep(round(random.random(),2))
+
+                instance_type_done=0
+                scale_api_retry_count=1
+                while(instance_type_done == 0):
+                    try:
+                        result = self.instance.modify_attribute(
+                            InstanceType={
+                                'Value': modifiedInstanceType
+                            }
+                        )
+                        instance_type_done=1
+                    except Exception as e:
+                        self.logger.warning('Worker::instance.modify_attribute() encountered an exception where requested instance type ['+ modifiedInstanceType +'] resulted in -->' + str(e))
+                        if (scale_api_retry_count > self.max_api_request):
+                            msg = 'Maximum Retries RateLimitExceeded reached for modifiedInstanceType , stopping process at number of retries--> '
+                            self.logger.error(msg)
+                            exit()
+                        else:
+                            self.logger.warning('Exponential Backoff in progress, retry count = %s' % str(scale_api_retry_count))
+                            self.exponentialBackoff(scale_api_retry_count)
+                            scale_api_retry_count += 1
 		
-		instance_ebs_check=0    
-		while(instance_ebs_check == 0):
-			try:
+                ebs_optimized_done=0
+                scale_api_retry_count=1
+                while(ebs_optimized_done == 0):
+                    try:
+                        result = self.instance.modify_attribute(
+                            EbsOptimized={
+                            'Value': ebsOptimizedAttr
+                            }
+                        )
+                        ebs_optimized_done=1
+                    except Exception as e:
+                        self.logger.warning('Worker::instance.modify_attribute() encountered an exception where requested instance type ['+ ebsOptimizedAttr +'] resulted in -->' + str(e))
+                        self.logger.warning('Exponential Backoff in progress, retry count = %s' % str(scale_api_retry_count))
+                        if (ebs_optimized_done > self.max_api_request):
+                            msg = 'Maximum Retries RateLimitExceeded reached for ebsOptimizedAttr, stopping process at number of retries--> '
+                            self.logger.error(msg)
+                            exit()
+                        else:
+                            self.logger.warning('Exponential Backoff in progress, retry count = %s' % str(scale_api_retry_count))
+                            self.exponentialBackoff(scale_api_retry_count)
+                            scale_api_retry_count += 1
 
-	                        result = self.instance.modify_attribute(
-                                EbsOptimized={
-                                'Value': ebsOptimizedAttr
-                        	}
-                    		)
-                        	instance_ebs_check=1
-			except Exception as e:
-                    		self.logger.warning('Worker::instance.modify_attribute() encountered an exception where requested instance type ['+ ebsOptimizedAttr +'] resulted in -->' + str(e))
-				time.sleep(round(random.random(),2))
-
-		        
                     # It appears the start instance reads 'modify_attribute' changes as eventually consistent in AWS (assume DynamoDB),
                     #    this can cause an issue on instance type change, whereby the LaunchPlan generates an exception.
                     #    To mitigate against this, we will introduce a one second sleep delay after modifying an attribute
-                	time.sleep(self.scalingInstanceDelay)
+                    time.sleep(self.scalingInstanceDelay)
 
                 self.logger.info('scaleInstance() for ' + self.instance.id + ' result is %s' % result)
         else:
