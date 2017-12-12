@@ -135,7 +135,7 @@ class StartWorker(Worker):
 
     def scaleInstance(self, modifiedInstanceType):
         instanceState  = self.instance.state
-	self.modifiedInstanceType = modifiedInstanceType
+
 
         if (instanceState['Name'] == 'stopped'):
 
@@ -145,7 +145,7 @@ class StartWorker(Worker):
                 self.logger.warning('DryRun Flag is set - instance will not be scaled')
 
             else:
-                instanceType = self.modifiedInstanceType  # This will return as t2.xlarge for example
+                instanceType = self.instance.instance_type  # This will return as t2.xlarge for example
                 instanceFamily = instanceType.split('.')[0]  # Grab the first token after split()
                 self.logger.info('Instance [%s] will be scaled to Instance Type [%s]' % (self.instance.id , modifiedInstanceType) )
                 # EC2.Instance.modify_attribute()
@@ -188,9 +188,9 @@ class StartWorker(Worker):
                         )
                         ebs_optimized_done=1
                     except Exception as e:
-                        self.logger.warning('Worker::instance.modify_attribute() encountered an exception where requested instance type ['+ ebsOptimizedAttr +'] resulted in -->' + str(e))
+                        self.logger.warning('Worker::instance.modify_attribute() encountered an exception where requested EBS optimized flag to ['+ str(ebsOptimizedAttr) +'] resulted in -->' + str(e))
                         self.logger.warning('Exponential Backoff in progress, retry count = %s' % str(scale_api_retry_count))
-                        if (ebs_optimized_done > self.max_api_request):
+                        if (scale_api_retry_count > self.max_api_request):
                             msg = 'Maximum Retries RateLimitExceeded reached for ebsOptimizedAttr, stopping process at number of retries--> '
                             self.logger.error(msg)
                             exit()
