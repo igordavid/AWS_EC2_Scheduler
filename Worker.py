@@ -134,9 +134,8 @@ class StartWorker(Worker):
                 self.logger.warning('Worker::instance.start() encountered an exception of -->' + str(e))
 
     def scaleInstance(self, modifiedInstanceType):
-        instanceState  = self.instance.state
-	self.modifiedInstanceType = modifiedInstanceType
 
+        instanceState  = self.instance.state
         if (instanceState['Name'] == 'stopped'):
 
 
@@ -145,13 +144,14 @@ class StartWorker(Worker):
                 self.logger.warning('DryRun Flag is set - instance will not be scaled')
 
             else:
-                instanceType = self.modifiedInstanceType  # This will return as t2.xlarge for example
-                instanceFamily = instanceType.split('.')[0]  # Grab the first token after split()
                 self.logger.info('Instance [%s] will be scaled to Instance Type [%s]' % (self.instance.id , modifiedInstanceType) )
+
+                targetInstanceFamily = modifiedInstanceType.split('.')[0]  # Grab the first token after split()
+
                 # EC2.Instance.modify_attribute()
                 # Check and exclude non-optimized instance families. Should be enhanced to be a map.  Currently added as hotfix.
                 preventEbsOptimizedList = [ 't2' ]
-                if (instanceFamily in preventEbsOptimizedList ):
+                if (targetInstanceFamily in preventEbsOptimizedList ):
                     ebsOptimizedAttr = False
                 else:
                     ebsOptimizedAttr = self.instance.ebs_optimized    # May have been set to True or False previously
@@ -178,7 +178,7 @@ class StartWorker(Worker):
                             scale_api_retry_count += 1
 		
                 ebs_optimized_done=0
-                scale_api_retry_count=1
+                ebs_optimized_retry_count=1
                 while(ebs_optimized_done == 0):
                     try:
                         result = self.instance.modify_attribute(
@@ -188,16 +188,15 @@ class StartWorker(Worker):
                         )
                         ebs_optimized_done=1
                     except Exception as e:
-                        self.logger.warning('Worker::instance.modify_attribute() encountered an exception where requested instance type ['+ ebsOptimizedAttr +'] resulted in -->' + str(e))
-                        self.logger.warning('Exponential Backoff in progress, retry count = %s' % str(scale_api_retry_count))
-                        if (ebs_optimized_done > self.max_api_request):
+                        self.logger.warning('Worker::instance.modify_attribute() encountered an exception where requested EBS optimized flag set to ['+ str(ebsOptimizedAttr) +'] resulted in -->' + str(e))
+                        if (ebs_optimized_retry_count > self.max_api_request):
                             msg = 'Maximum Retries RateLimitExceeded reached for ebsOptimizedAttr, stopping process at number of retries--> '
                             self.logger.error(msg)
                             exit()
                         else:
-                            self.logger.warning('Exponential Backoff in progress, retry count = %s' % str(scale_api_retry_count))
-                            self.exponentialBackoff(scale_api_retry_count)
-                            scale_api_retry_count += 1
+                            self.logger.warning('Exponential Backoff in progress, retry count = %s' % str(ebs_optimized_retry_count))
+                            self.exponentialBackoff(ebs_optimized_retry_count)
+                            ebs_optimized_retry_count += 1
 
                     # It appears the start instance reads 'modify_attribute' changes as eventually consistent in AWS (assume DynamoDB),
                     #    this can cause an issue on instance type change, whereby the LaunchPlan generates an exception.
