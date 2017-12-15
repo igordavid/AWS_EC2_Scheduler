@@ -490,12 +490,24 @@ class Orchestrator(object):
 
 		return targetInstanceColl
 
-	def exponentialBackoff(self,count):
+	def exponentialBackoff(self,count,publishSNSTopicMessage,instance):
 		try:
 			sleepTime = pow(float(2), float(count))
 			msg = 'exponentialBackoff(), sleeping for number of seconds ---> '
 			self.logger.info(msg + str(sleepTime))
                         time.sleep(sleepTime)
+
+			# This is to ensure that we are sending SNS notifications only after 3rd count
+			if (count > 3):
+				try:			
+					subjectPrefix = "Scheduler Throttling detected"
+					msg = 'exponentialBackoff(), sleeping for number of seconds ---> %s' % str(sleepTime)
+	        	                publishSNSTopicMessage(subjectPrefix, msg, instance)
+					self.logger.info('Sending SNS notification for Throttling')
+				except Exception as e:
+					msg = 'sending SNS message failed with error %s -->'
+		                        self.logger.error(msg + str(e))
+
 		except Exception as e:
 			msg = 'exponentialBackoff failed with error %s -->'
 			self.logger.error(msg + str(e))
