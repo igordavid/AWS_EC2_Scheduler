@@ -47,7 +47,7 @@ class Worker(object):
 
         try:
             self.snsTopic.publish(
-                Subject=self.snsTopicSubject + ':' + subjectPrefix,
+                Subject=subjectPrefix,
                 Message=theMessage + tagsMsg,
             )
 
@@ -90,10 +90,16 @@ class StartWorker(Worker):
                             if (elb_api_retry_count > self.max_api_request):
                                 msg = 'Maximum API Call Retries for addressELBRegistration: deregister() reached, exiting program'
                                 self.logger.error(msg + str(elb_api_retry_count))
+                                subjectPrefix = "Scheduler Max Retries RateLimitExceeded - ELB"
+                                try:
+	                                self.publishSNSTopicMessage(subjectPrefix, msg, self.instance)
+					self.logger.info('Sending SNS notification for Max Retries RateLimitExceeded - ELB')
+                                except Exception as e:
+					self.logger.warning('Worker::instance.start() encountered an exception of -->' + str(e))
                                 exit()
                             else:
                                 self.logger.warning('Exponential Backoff in progress, retry count = %s' % str(elb_api_retry_count))
-                                self.exponentialBackoff(elb_api_retry_count)
+                                self.exponentialBackoff(elb_api_retry_count,self.publishSNSTopicMessage,self.instance)
                                 elb_api_retry_count+=1
 
                     success_register_done=0
@@ -111,10 +117,16 @@ class StartWorker(Worker):
                             if (elb_api_retry_count > self.max_api_request):
                                 msg = 'Maximum API Call Retries for addressELBRegistration:register() reached, exiting program'
                                 self.logger.error(msg + str(elb_api_retry_count))
+                                subjectPrefix = "Scheduler Max Retries RateLimitExceeded - ELB"
+                                try:
+                                        self.publishSNSTopicMessage(subjectPrefix, msg, self.instance)
+                                        self.logger.info('Sending SNS notification for Max Retries RateLimitExceeded - ELB')
+                                except Exception as e:
+                                        self.logger.warning('Worker::instance.start() encountered an exception of -->' + str(e))
                                 exit()
                             else:
                                 self.logger.warning('Exponential Backoff in progress, retry count = %s' % str(elb_api_retry_count))
-                                self.exponentialBackoff(elb_api_retry_count)
+                                self.exponentialBackoff(elb_api_retry_count,self.publishSNSTopicMessage,self.instance)
                                 elb_api_retry_count+=1
 
 
@@ -169,12 +181,19 @@ class StartWorker(Worker):
                     except Exception as e:
                         self.logger.warning('Worker::instance.modify_attribute() encountered an exception where requested instance type ['+ modifiedInstanceType +'] resulted in -->' + str(e))
                         if (scale_api_retry_count > self.max_api_request):
-                            msg = 'Maximum Retries RateLimitExceeded reached for modifiedInstanceType , stopping process at number of retries--> '
+                            msg = 'Maximum Retries RateLimitExceeded reached for modifiedInstanceType , stopping process at number of retries--> %s ' % self.max_api_request
                             self.logger.error(msg)
+                            subjectPrefix = "Scheduler Max Retries RateLimitExceeded - Instance Modify"
+                            try:
+                                        self.publishSNSTopicMessage(subjectPrefix, msg, self.instance)
+                                        self.logger.info('Sending SNS notification for Max Retries RateLimitExceeded - Instance Modify')
+                            except Exception as e:
+                                        self.logger.warning('Worker::instance.start() encountered an exception of -->' + str(e))
+
                             exit()
                         else:
                             self.logger.warning('Exponential Backoff in progress, retry count = %s' % str(scale_api_retry_count))
-                            self.exponentialBackoff(scale_api_retry_count)
+                            self.exponentialBackoff(scale_api_retry_count,self.publishSNSTopicMessage,self.instance)
                             scale_api_retry_count += 1
 		
                 ebs_optimized_done=0
@@ -190,12 +209,18 @@ class StartWorker(Worker):
                     except Exception as e:
                         self.logger.warning('Worker::instance.modify_attribute() encountered an exception where requested EBS optimized flag set to ['+ str(ebsOptimizedAttr) +'] resulted in -->' + str(e))
                         if (ebs_optimized_retry_count > self.max_api_request):
-                            msg = 'Maximum Retries RateLimitExceeded reached for ebsOptimizedAttr, stopping process at number of retries--> '
+                            msg = 'Maximum Retries RateLimitExceeded reached for ebsOptimizedAttr, stopping process at number of retries--> %s ' % self.max_api_request
                             self.logger.error(msg)
+                            subjectPrefix = "Scheduler Max Retries RateLimitExceeded - EBS Modify"
+                            try:
+                                        self.publishSNSTopicMessage(subjectPrefix, msg, self.instance)
+                                        self.logger.info('Sending SNS notification for Max Retries RateLimitExceeded - EBS Modify')
+                            except Exception as e:
+                                        self.logger.warning('Worker::instance.start() encountered an exception of -->' + str(e))
                             exit()
                         else:
                             self.logger.warning('Exponential Backoff in progress, retry count = %s' % str(ebs_optimized_retry_count))
-                            self.exponentialBackoff(ebs_optimized_retry_count)
+                            self.exponentialBackoff(ebs_optimized_retry_count,self.publishSNSTopicMessage,self.instance)
                             ebs_optimized_retry_count += 1
 
                     # It appears the start instance reads 'modify_attribute' changes as eventually consistent in AWS (assume DynamoDB),
